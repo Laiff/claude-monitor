@@ -1,0 +1,44 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/claude-monitor",
+    "crates/monitor-core",
+    "crates/monitor-data",
+    "crates/monitor-ui",
+    "crates/monitor-runtime",
+]
+
+[workspace.package]
+version = "4.0.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+thiserror = "2.0"
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive", "env", "string"] }
+tokio = { version = "1.0", features = ["full"] }
+dirs = "6.0.0"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+iana-time-zone = "0.1"
+regex = "1.11"
+tracing = "0.1"
+walkdir = "2.5"
+tempfile = "3.0"
+monitor-core = { path = "crates/monitor-core" }
+monitor-data = { path = "crates/monitor-data" }
+monitor-ui = { path = "crates/monitor-ui" }
+monitor-runtime = { path = "crates/monitor-runtime" }
+ratatui = "0.30.0"
+crossterm = "0.29.0"
+unicode-width = "0.2"
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
