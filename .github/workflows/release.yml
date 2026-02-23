@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha256: ${{ steps.checksum.outputs.sha256 }}
+    steps:
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+
+      - name: Compute source tarball SHA256
+        id: checksum
+        run: |
+          SHA256=$(curl -sL "https://github.com/Laiff/claude-monitor/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz" | shasum -a 256 | awk '{print $1}')
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+
+  update-homebrew:
+    name: Update Homebrew Formula
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tap repository
+        uses: actions/checkout@v6
+        with:
+          repository: Laiff/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Update formula
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+          TAG: ${{ github.ref_name }}
+          SHA256: ${{ needs.release.outputs.sha256 }}
+        run: |
+          cat > Formula/claude-monitor.rb << 'RUBY'
+          class ClaudeMonitor < Formula
+            desc "Terminal UI for monitoring Claude Code usage and sessions"
+            homepage "https://github.com/Laiff/claude-monitor"
+            url "https://github.com/Laiff/claude-monitor/archive/refs/tags/TAG_PLACEHOLDER.tar.gz"
+            sha256 "SHA256_PLACEHOLDER"
+            license "MIT"
+            head "https://github.com/Laiff/claude-monitor.git", branch: "main"
+
+            depends_on "rust" => :build
+
+            def install
+              system "cargo", "install", *std_cargo_args(path: "crates/claude-monitor")
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/claude-monitor --version")
+            end
+          end
+          RUBY
+
+          sed -i "s|TAG_PLACEHOLDER|v${VERSION}|" Formula/claude-monitor.rb
+          sed -i "s|SHA256_PLACEHOLDER|${SHA256}|" Formula/claude-monitor.rb
+
+      - name: Commit and push formula
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/claude-monitor.rb
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "Update claude-monitor to ${TAG}"
+          git push
